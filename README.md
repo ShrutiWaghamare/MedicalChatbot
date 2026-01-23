@@ -169,13 +169,3 @@ Your Medical Chatbot will now be:
 * Running locally via Flask
 * Deployed on AWS using Docker + GitHub Actions
 
----
-
-If you want next, I can:
-
-* Add **Dockerfile**
-* Write **GitHub Actions YAML**
-* Improve README for **portfolio / recruiters**
-* Secure `.env` handling for production
-
-Just tell me 👍
