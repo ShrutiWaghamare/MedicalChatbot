@@ -2,7 +2,7 @@
 
 ## 📌 Overview
 
-A Medical Chatbot built using **LangChain**, **OpenAI GPT**, **Pinecone**, and **Flask**, with **AWS CI/CD deployment using GitHub Actions**.
+A Medical Chatbot built using **LangChain**, **Azure OpenAI (LLM only)**, **Pinecone**, and **Flask**, with **AWS CI/CD deployment using GitHub Actions**.
 
 ---
 
@@ -11,7 +11,7 @@ A Medical Chatbot built using **LangChain**, **OpenAI GPT**, **Pinecone**, and *
 * Python
 * LangChain
 * Flask
-* OpenAI GPT
+* Azure OpenAI (LLM only)
 * Pinecone
 * Docker
 * AWS (EC2, ECR, IAM)
@@ -44,7 +44,7 @@ Create a `.env` file in the **root directory** and add:
 
 ```env
 PINECONE_API_KEY="xxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-OPENAI_API_KEY="xxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+AZURE_OPENAI_API_KEY="xxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 ```
 
 ---
@@ -147,7 +147,7 @@ AWS_SECRET_ACCESS_KEY
 AWS_DEFAULT_REGION
 ECR_REPO
 PINECONE_API_KEY
-OPENAI_API_KEY
+AZURE_OPENAI_API_KEY
 ```
 
 ---
