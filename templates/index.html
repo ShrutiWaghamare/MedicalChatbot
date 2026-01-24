@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Medical Chatbot - AI Health Assistant</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- Modern Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500;600;700;800&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Marked.js for markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- Prism.js for syntax highlighting -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" id="prism-theme">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar">
+        <div class="navbar-content">
+            <div class="navbar-brand">
+                <i class="fas fa-stethoscope"></i>
+                <span>Medical Chatbot</span>
+            </div>
+            <div class="navbar-links">
+                <button class="nav-link history-toggle" id="historyToggle" title="View chat history">
+                    <i class="fas fa-table"></i>
+                </button>
+                <a href="https://github.com/ShrutiWaghamare" target="_blank" rel="noopener noreferrer" class="nav-link" title="GitHub">
+                    <i class="fab fa-github"></i>
+                </a>
+                <a href="https://www.linkedin.com/in/shruti-waghamare-641049259/" target="_blank" rel="noopener noreferrer" class="nav-link" title="LinkedIn">
+                    <i class="fab fa-linkedin"></i>
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Animated Background -->
+    <div class="background-animation">
+        <div class="circle circle-1"></div>
+        <div class="circle circle-2"></div>
+        <div class="circle circle-3"></div>
+    </div>
+
+    <!-- Main Layout Container -->
+    <div class="main-layout">
+        <!-- Left Column - Hero Section -->
+        <div class="hero-section">
+            <div class="hero-content">
+                <div class="hero-header">
+                    <div class="hero-logo">
+                        <div class="hero-logo-icon">
+                            <i class="fas fa-stethoscope"></i>
+                        </div>
+                        <h1>AI Health Assistant</h1>
+                    </div>
+                </div>
+                
+                <div class="hero-main">
+                    <h2 class="hero-title">Your intelligent health information companion</h2>
+                    <p class="hero-description">
+                        Get instant, accurate answers to your medical questions powered by AI and backed by medical literature. 
+                        Ask about symptoms, conditions, treatments, and more.
+                    </p>
+                    
+                    <div class="hero-features">
+                        <div class="feature-item">
+                            <div class="feature-icon">
+                                <i class="fas fa-brain"></i>
+                            </div>
+                            <div class="feature-content">
+                                <h3>AI-Powered</h3>
+                                <p>Advanced AI technology provides accurate medical information</p>
+                            </div>
+                        </div>
+                        
+                        <div class="feature-item">
+                            <div class="feature-icon">
+                                <i class="fas fa-book-medical"></i>
+                            </div>
+                            <div class="feature-content">
+                                <h3>Evidence-Based</h3>
+                                <p>Answers backed by medical literature and research</p>
+                            </div>
+                        </div>
+                        
+                        <div class="feature-item">
+                            <div class="feature-icon">
+                                <i class="fas fa-shield-alt"></i>
+                            </div>
+                            <div class="feature-content">
+                                <h3>Privacy Focused</h3>
+                                <p>Your conversations are secure and private</p>
+                            </div>
+                        </div>
+                        
+                        <div class="feature-item">
+                            <div class="feature-icon">
+                                <i class="fas fa-clock"></i>
+                            </div>
+                            <div class="feature-content">
+                                <h3>24/7 Available</h3>
+                                <p>Get answers anytime, anywhere</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="hero-disclaimer">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <p><strong>Medical Disclaimer:</strong> This chatbot provides general information only and is not a substitute for professional medical advice, diagnosis, or treatment. Always consult with qualified healthcare providers for medical concerns.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column - Chatbot Interface -->
+        <div class="chatbot-section">
+            <div class="chatbot-container">
+                <!-- Chatbot Header -->
+                <div class="chatbot-header">
+                    <div class="chatbot-header-content">
+                        <div class="chatbot-logo">
+                            <div class="chatbot-logo-icon">
+                                <i class="fas fa-robot"></i>
+                            </div>
+                            <div class="chatbot-logo-text">
+                                <h3>AI Assistant</h3>
+                                <div class="status-indicator">
+                                    <span class="status-dot"></span>
+                                    <span>Ready</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="chatbot-header-actions">
+                            <button class="theme-toggle-small" id="themeToggleSmall" title="Toggle theme">
+                                <i class="fas fa-moon" id="themeIconSmall"></i>
+                            </button>
+                            <button class="clear-button" id="clearButton" title="Clear conversation">
+                                <i class="fas fa-trash-alt"></i>
+                                <span>Clear</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chat Container -->
+                <div class="chat-container">
+                    <div class="chat-messages" id="chatMessages">
+                        <!-- Welcome Message -->
+                        <div class="message bot-message" data-message-id="welcome">
+                            <div class="message-avatar">
+                                <i class="fas fa-robot"></i>
+                            </div>
+                            <div class="message-content">
+                                <div class="message-text">
+                                    <p>Hello! I'm your medical information assistant powered by AI. I can help answer questions about medical conditions, treatments, symptoms, and health-related topics based on medical literature.</p>
+                                    <p>Feel free to ask me anything about medical topics, and I'll do my best to provide accurate, evidence-based information.</p>
+                                </div>
+                                <div class="message-actions">
+                                    <button class="action-btn" onclick="copyMessage(this)" title="Copy message">
+                                        <i class="fas fa-copy"></i>
+                                    </button>
+                                    <button class="action-btn reaction-btn" onclick="handleReaction(this, 'like')" title="Helpful" data-reaction="like">
+                                        <i class="fas fa-thumbs-up"></i>
+                                    </button>
+                                    <button class="action-btn reaction-btn" onclick="handleReaction(this, 'dislike')" title="Not helpful" data-reaction="dislike">
+                                        <i class="fas fa-thumbs-down"></i>
+                                    </button>
+                                </div>
+                                <div class="message-time"></div>
+                            </div>
+                        </div>
+
+                        <!-- Suggested Prompts (shown when chat is empty) -->
+                        <div class="suggested-prompts" id="suggestedPrompts">
+                            <div class="prompts-title">Try asking:</div>
+                            <div class="prompts-grid">
+                                <button class="prompt-chip" data-prompt="What are the common symptoms of diabetes?">
+                                    <i class="fas fa-heartbeat"></i>
+                                    <span>Common symptoms of diabetes</span>
+                                </button>
+                                <button class="prompt-chip" data-prompt="How does hypertension affect the body?">
+                                    <i class="fas fa-tint"></i>
+                                    <span>Hypertension effects</span>
+                                </button>
+                                <button class="prompt-chip" data-prompt="What are the treatment options for migraines?">
+                                    <i class="fas fa-head-side-virus"></i>
+                                    <span>Migraine treatments</span>
+                                </button>
+                                <button class="prompt-chip" data-prompt="Explain the difference between Type 1 and Type 2 diabetes">
+                                    <i class="fas fa-vial"></i>
+                                    <span>Type 1 vs Type 2 diabetes</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Typing Indicator -->
+                    <div class="typing-indicator" id="typingIndicator">
+                        <div class="message-avatar">
+                            <i class="fas fa-robot"></i>
+                        </div>
+                        <div class="typing-content">
+                            <div class="typing-dots">
+                                <span></span>
+                                <span></span>
+                                <span></span>
+                            </div>
+                            <span class="typing-text">AI is thinking...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Input Area -->
+                <div class="input-container">
+                    <form id="chatForm" class="chat-form">
+                        <div class="input-wrapper">
+                            <textarea 
+                                id="userInput" 
+                                placeholder="Ask me anything about medical conditions, symptoms, treatments..." 
+                                autocomplete="off"
+                                rows="1"
+                                required
+                            ></textarea>
+                            <button type="submit" id="sendButton" class="send-button" title="Send message">
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
+                    </form>
+                    <div class="input-footer">
+                        <div class="footer-icons">
+                            <i class="fas fa-keyboard"></i>
+                            <span>Press <kbd>Enter</kbd> to send</span>
+                            <span class="separator">•</span>
+                            <span><kbd>Shift</kbd> + <kbd>Enter</kbd> for new line</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- History Drawer -->
+    <div class="history-drawer" id="historyDrawer" aria-hidden="true">
+        <div class="history-header">
+            <div>
+                <h3>Chat History</h3>
+                <p>Current session</p>
+            </div>
+            <button class="history-close" id="historyClose" title="Close">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="history-table-wrapper">
+            <table class="history-table">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Role</th>
+                        <th>Message</th>
+                    </tr>
+                </thead>
+                <tbody id="historyTableBody">
+                    <tr>
+                        <td colspan="3">No messages yet.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div class="toast" id="toast">
+        <i class="toast-icon"></i>
+        <span class="toast-message"></span>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>
