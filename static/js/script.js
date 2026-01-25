@@ -13,7 +13,7 @@ const historyToggle = document.getElementById('historyToggle');
 const historyDrawer = document.getElementById('historyDrawer');
 const historyClose = document.getElementById('historyClose');
 const historyTableBody = document.getElementById('historyTableBody');
-// File upload and voice input intentionally disabled for now
+// Chatbot is Q&A only (no file upload)
 
 let messageIdCounter = 0;
 // Initialize

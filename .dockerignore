@@ -1,0 +1,33 @@
+# Secrets and env (use docker run -e or --env-file)
+.env
+.env.*
+
+# Git and IDE
+.git
+.gitignore
+.vscode
+.idea
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+.venv
+venv
+env
+*.egg-info
+
+# Data (DB created at runtime; mount volume for persistence)
+data/chatbot.db
+data/*.db
+
+# Docs and misc
+README.md
+LICENSE
+IMPROVEMENTS.md
+practice
+*.md
+
+# Docker
+Dockerfile
+.dockerignore
