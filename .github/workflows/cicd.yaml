@@ -1,8 +1,4 @@
-# Secrets: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION, ECR_REPO,
-# PINECONE_API_KEY, AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT
-# Runner: self-hosted (EC2 with Docker)
-
-name: CI/CD - Build, Push to ECR & Deploy
+name: CI - Build & Push Docker Image to ECR
 
 on:
   push:
@@ -11,13 +7,13 @@ on:
 
 env:
   IMAGE_NAME: medical-chatbot
-  CONTAINER_NAME: medical-chatbot
 
 jobs:
-  build-and-deploy:
+  build:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Configure AWS credentials
@@ -35,27 +31,10 @@ jobs:
             docker login --username AWS --password-stdin "$ECR_REGISTRY"
 
       - name: Build Docker image
-        run: docker build -t ${{ env.IMAGE_NAME }}:latest .
-
-      - name: Tag and push to ECR
         run: |
-          docker tag ${{ env.IMAGE_NAME }}:latest ${{ secrets.ECR_REPO }}:latest
+          docker build -t $IMAGE_NAME:latest .
+
+      - name: Tag & push image to ECR
+        run: |
+          docker tag $IMAGE_NAME:latest ${{ secrets.ECR_REPO }}:latest
           docker push ${{ secrets.ECR_REPO }}:latest
-
-      - name: Deploy - stop old container
-        run: |
-          docker stop ${{ env.CONTAINER_NAME }} 2>/dev/null || true
-          docker rm ${{ env.CONTAINER_NAME }} 2>/dev/null || true
-
-      - name: Deploy - run new container
-        run: |
-          docker pull ${{ secrets.ECR_REPO }}:latest
-          docker run -d \
-            --name ${{ env.CONTAINER_NAME }} \
-            --restart unless-stopped \
-            -p 5000:5000 \
-            -v medical-chatbot-data:/app/data \
-            -e PINECONE_API_KEY="${{ secrets.PINECONE_API_KEY }}" \
-            -e AZURE_OPENAI_API_KEY="${{ secrets.AZURE_OPENAI_API_KEY }}" \
-            -e AZURE_OPENAI_ENDPOINT="${{ secrets.AZURE_OPENAI_ENDPOINT }}" \
-            ${{ secrets.ECR_REPO }}:latest
