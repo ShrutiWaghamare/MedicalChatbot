@@ -1,4 +1,4 @@
-name: CI - Build & Push Docker Image to ECR
+name: CI/CD - Build, Push to ECR & Deploy to EC2
 
 on:
   push:
@@ -9,9 +9,9 @@ env:
   IMAGE_NAME: medical-chatbot
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-
+  continuous-integration:
+    runs-on: self-hosted
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -24,17 +24,72 @@ jobs:
           aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
 
       - name: Login to Amazon ECR
-        run: |
-          ECR_REGISTRY=${{ secrets.ECR_REPO }}
-          ECR_REGISTRY="${ECR_REGISTRY%%/*}"
-          aws ecr get-login-password --region ${{ secrets.AWS_DEFAULT_REGION }} | \
-            docker login --username AWS --password-stdin "$ECR_REGISTRY"
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build Docker image
         run: |
-          docker build -t $IMAGE_NAME:latest .
+          docker build -t ${{ secrets.ECR_REPO }}:latest .
 
-      - name: Tag & push image to ECR
+      - name: Tag Docker image
         run: |
-          docker tag $IMAGE_NAME:latest ${{ secrets.ECR_REPO }}:latest
+          docker tag ${{ secrets.ECR_REPO }}:latest ${{ secrets.ECR_REPO }}:latest
+
+      - name: Push to ECR
+        run: |
           docker push ${{ secrets.ECR_REPO }}:latest
+
+  continuous-deployment:
+    needs: continuous-integration
+    runs-on: self-hosted
+    
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Pull image from ECR
+        run: |
+          docker pull ${{ secrets.ECR_REPO }}:latest
+
+      - name: Stop old container
+        run: |
+          docker stop medical-chatbot || true
+          docker rm medical-chatbot || true
+
+      - name: Run Docker container
+        env:
+          PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
+          AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+        run: |
+          docker run -d \
+            --name medical-chatbot \
+            --restart unless-stopped \
+            -p 5000:5000 \
+            -e PINECONE_API_KEY="${PINECONE_API_KEY}" \
+            -e AZURE_OPENAI_API_KEY="${AZURE_OPENAI_API_KEY}" \
+            -e AZURE_OPENAI_ENDPOINT="${AZURE_OPENAI_ENDPOINT}" \
+            -e SECRET_KEY="${SECRET_KEY}" \
+            -v /home/ubuntu/medical-chatbot-data:/app/data \
+            ${{ secrets.ECR_REPO }}:latest
+
+      - name: Verify deployment
+        run: |
+          sleep 5
+          if docker ps | grep -q medical-chatbot; then
+            echo "✅ Deployment successful! Container is running."
+            docker ps | grep medical-chatbot
+          else
+            echo "❌ Deployment failed! Container is not running."
+            docker logs medical-chatbot
+            exit 1
+          fi
