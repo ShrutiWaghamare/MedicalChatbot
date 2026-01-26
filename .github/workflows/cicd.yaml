@@ -27,6 +27,13 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
+      - name: Authenticate Docker to ECR
+        run: |
+          ECR_REGISTRY=${{ secrets.ECR_REPO }}
+          ECR_REGISTRY="${ECR_REGISTRY%%/*}"
+          aws ecr get-login-password --region ${{ secrets.AWS_DEFAULT_REGION }} | \
+            docker login --username AWS --password-stdin "$ECR_REGISTRY"
+
       - name: Build Docker image
         run: |
           docker build -t ${{ secrets.ECR_REPO }}:latest .
@@ -54,6 +61,13 @@ jobs:
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Authenticate Docker to ECR
+        run: |
+          ECR_REGISTRY=${{ secrets.ECR_REPO }}
+          ECR_REGISTRY="${ECR_REGISTRY%%/*}"
+          aws ecr get-login-password --region ${{ secrets.AWS_DEFAULT_REGION }} | \
+            docker login --username AWS --password-stdin "$ECR_REGISTRY"
 
       - name: Pull image from ECR
         run: |
