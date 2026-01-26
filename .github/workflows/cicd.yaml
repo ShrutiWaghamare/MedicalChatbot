@@ -101,21 +101,48 @@ jobs:
         run: |
           docker build -t medical-chatbot:latest .
 
+      - name: Verify ECR Repository Access
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPO_NAME: medicalchatbot
+        run: |
+          echo "Verifying ECR repository access..."
+          # Check if repository exists and we have access
+          aws ecr describe-repositories --repository-names $ECR_REPO_NAME --region ${{ secrets.AWS_DEFAULT_REGION }} || {
+            echo "Repository might not exist. Creating it..."
+            aws ecr create-repository --repository-name $ECR_REPO_NAME --region ${{ secrets.AWS_DEFAULT_REGION }} || echo "Repository creation failed or already exists"
+          }
+          
+          # Verify we can get repository URI
+          REPO_URI=$(aws ecr describe-repositories --repository-names $ECR_REPO_NAME --region ${{ secrets.AWS_DEFAULT_REGION }} --query 'repositories[0].repositoryUri' --output text)
+          echo "Repository URI: $REPO_URI"
+          
+          # Test ECR permissions
+          echo "Testing ECR push permissions..."
+          aws ecr get-authorization-token --region ${{ secrets.AWS_DEFAULT_REGION }} --output text > /dev/null && echo "✅ ECR authorization successful" || echo "❌ ECR authorization failed"
+
       - name: Tag Docker image for ECR
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPO_NAME: medical-chatbot
+          ECR_REPO_NAME: medicalchatbot
         run: |
           # Tag with full ECR registry URL
           docker tag medical-chatbot:latest $ECR_REGISTRY/$ECR_REPO_NAME:latest
           echo "Tagged image as: $ECR_REGISTRY/$ECR_REPO_NAME:latest"
+          
+          # List tagged images to verify
+          docker images | grep $ECR_REPO_NAME
 
       - name: Push to ECR
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPO_NAME: medical-chatbot
+          ECR_REPO_NAME: medicalchatbot
         run: |
           echo "Pushing to ECR: $ECR_REGISTRY/$ECR_REPO_NAME:latest"
+          echo "Verifying Docker is logged in to ECR..."
+          docker info | grep -i registry || echo "Docker registry info"
+          
+          # Push with verbose output
           docker push $ECR_REGISTRY/$ECR_REPO_NAME:latest
 
   continuous-deployment:
@@ -207,7 +234,7 @@ jobs:
       - name: Pull image from ECR
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPO_NAME: medical-chatbot
+          ECR_REPO_NAME: medicalchatbot
         run: |
           echo "Pulling from ECR: $ECR_REGISTRY/$ECR_REPO_NAME:latest"
           docker pull $ECR_REGISTRY/$ECR_REPO_NAME:latest
@@ -220,7 +247,7 @@ jobs:
       - name: Run Docker container
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPO_NAME: medical-chatbot
+          ECR_REPO_NAME: medicalchatbot
           PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
           AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
           AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
