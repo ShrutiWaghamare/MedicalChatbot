@@ -16,6 +16,28 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Verify Docker is available
+        run: |
+          if ! command -v docker >/dev/null 2>&1; then
+            echo "Docker not found on the runner. Please install Docker or use a runner with Docker."
+            exit 1
+          fi
+          echo "docker found: $(docker --version)"
+
+      - name: Ensure AWS CLI v2 is installed
+        run: |
+          if ! command -v aws >/dev/null 2>&1; then
+            echo "Installing AWS CLI v2..."
+            sudo apt-get update
+            sudo apt-get install -y unzip curl
+            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+            unzip awscliv2.zip
+            sudo ./aws/install
+            rm -rf awscliv2.zip aws
+          else
+            echo "aws CLI already installed: $(aws --version)"
+          fi
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -51,6 +73,28 @@ jobs:
     runs-on: self-hosted
     
     steps:
+      - name: Verify Docker is available
+        run: |
+          if ! command -v docker >/dev/null 2>&1; then
+            echo "Docker not found on the runner. Please install Docker or use a runner with Docker."
+            exit 1
+          fi
+          echo "docker found: $(docker --version)"
+
+      - name: Ensure AWS CLI v2 is installed
+        run: |
+          if ! command -v aws >/dev/null 2>&1; then
+            echo "Installing AWS CLI v2..."
+            sudo apt-get update
+            sudo apt-get install -y unzip curl
+            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+            unzip awscliv2.zip
+            sudo ./aws/install
+            rm -rf awscliv2.zip aws
+          else
+            echo "aws CLI already installed: $(aws --version)"
+          fi
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
