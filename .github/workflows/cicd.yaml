@@ -38,6 +38,33 @@ jobs:
             echo "aws CLI already installed: $(aws --version)"
           fi
 
+      - name: Configure Docker DNS (before AWS setup)
+        run: |
+          # Fix Docker DNS issues by configuring daemon.json
+          echo "Checking current Docker DNS configuration..."
+          if [ -f /etc/docker/daemon.json ]; then
+            echo "Existing daemon.json found, backing up..."
+            sudo cp /etc/docker/daemon.json /etc/docker/daemon.json.backup
+          fi
+          
+          # Create or update daemon.json with DNS settings
+          sudo mkdir -p /etc/docker
+          echo '{"dns": ["8.8.8.8", "8.8.4.4", "127.0.0.53"]}' | sudo tee /etc/docker/daemon.json
+          
+          # Restart Docker to apply changes
+          echo "Restarting Docker daemon..."
+          sudo systemctl daemon-reload
+          sudo systemctl restart docker || sudo service docker restart
+          
+          # Wait for Docker to be ready
+          sleep 5
+          
+          # Verify Docker is running
+          sudo docker ps > /dev/null 2>&1 || (echo "Docker not responding, trying again..." && sleep 5 && sudo docker ps)
+          
+          echo "Docker DNS configured successfully"
+          echo "Docker version: $(docker --version)"
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -48,15 +75,6 @@ jobs:
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Configure Docker DNS
-        run: |
-          # Fix Docker DNS issues by configuring daemon.json
-          sudo mkdir -p /etc/docker
-          echo '{"dns": ["8.8.8.8", "8.8.4.4"]}' | sudo tee /etc/docker/daemon.json
-          sudo systemctl restart docker || sudo service docker restart
-          sleep 2
-          echo "Docker DNS configured"
 
       - name: Verify DNS and ECR connectivity
         run: |
@@ -114,6 +132,33 @@ jobs:
             echo "aws CLI already installed: $(aws --version)"
           fi
 
+      - name: Configure Docker DNS (before AWS setup)
+        run: |
+          # Fix Docker DNS issues by configuring daemon.json
+          echo "Checking current Docker DNS configuration..."
+          if [ -f /etc/docker/daemon.json ]; then
+            echo "Existing daemon.json found, backing up..."
+            sudo cp /etc/docker/daemon.json /etc/docker/daemon.json.backup
+          fi
+          
+          # Create or update daemon.json with DNS settings
+          sudo mkdir -p /etc/docker
+          echo '{"dns": ["8.8.8.8", "8.8.4.4", "127.0.0.53"]}' | sudo tee /etc/docker/daemon.json
+          
+          # Restart Docker to apply changes
+          echo "Restarting Docker daemon..."
+          sudo systemctl daemon-reload
+          sudo systemctl restart docker || sudo service docker restart
+          
+          # Wait for Docker to be ready
+          sleep 5
+          
+          # Verify Docker is running
+          sudo docker ps > /dev/null 2>&1 || (echo "Docker not responding, trying again..." && sleep 5 && sudo docker ps)
+          
+          echo "Docker DNS configured successfully"
+          echo "Docker version: $(docker --version)"
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -124,15 +169,6 @@ jobs:
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Configure Docker DNS
-        run: |
-          # Fix Docker DNS issues by configuring daemon.json
-          sudo mkdir -p /etc/docker
-          echo '{"dns": ["8.8.8.8", "8.8.4.4"]}' | sudo tee /etc/docker/daemon.json
-          sudo systemctl restart docker || sudo service docker restart
-          sleep 2
-          echo "Docker DNS configured"
 
       - name: Verify DNS and ECR connectivity
         run: |
