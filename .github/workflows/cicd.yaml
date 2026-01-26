@@ -99,15 +99,24 @@ jobs:
 
       - name: Build Docker image
         run: |
-          docker build -t ${{ secrets.ECR_REPO }}:latest .
+          docker build -t medical-chatbot:latest .
 
-      - name: Tag Docker image
+      - name: Tag Docker image for ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPO_NAME: medical-chatbot
         run: |
-          docker tag ${{ secrets.ECR_REPO }}:latest ${{ secrets.ECR_REPO }}:latest
+          # Tag with full ECR registry URL
+          docker tag medical-chatbot:latest $ECR_REGISTRY/$ECR_REPO_NAME:latest
+          echo "Tagged image as: $ECR_REGISTRY/$ECR_REPO_NAME:latest"
 
       - name: Push to ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPO_NAME: medical-chatbot
         run: |
-          docker push ${{ secrets.ECR_REPO }}:latest
+          echo "Pushing to ECR: $ECR_REGISTRY/$ECR_REPO_NAME:latest"
+          docker push $ECR_REGISTRY/$ECR_REPO_NAME:latest
 
   continuous-deployment:
     needs: continuous-integration
@@ -196,8 +205,12 @@ jobs:
           nslookup $ECR_REGISTRY || dig $ECR_REGISTRY || echo "DNS test completed"
 
       - name: Pull image from ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPO_NAME: medical-chatbot
         run: |
-          docker pull ${{ secrets.ECR_REPO }}:latest
+          echo "Pulling from ECR: $ECR_REGISTRY/$ECR_REPO_NAME:latest"
+          docker pull $ECR_REGISTRY/$ECR_REPO_NAME:latest
 
       - name: Stop old container
         run: |
@@ -206,6 +219,8 @@ jobs:
 
       - name: Run Docker container
         env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPO_NAME: medical-chatbot
           PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
           AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
           AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
@@ -220,7 +235,7 @@ jobs:
             -e AZURE_OPENAI_ENDPOINT="${AZURE_OPENAI_ENDPOINT}" \
             -e SECRET_KEY="${SECRET_KEY}" \
             -v /home/ubuntu/medical-chatbot-data:/app/data \
-            ${{ secrets.ECR_REPO }}:latest
+            $ECR_REGISTRY/$ECR_REPO_NAME:latest
 
       - name: Verify deployment
         run: |
