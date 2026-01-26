@@ -49,10 +49,29 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
+      - name: Configure Docker DNS
+        run: |
+          # Fix Docker DNS issues by configuring daemon.json
+          sudo mkdir -p /etc/docker
+          echo '{"dns": ["8.8.8.8", "8.8.4.4"]}' | sudo tee /etc/docker/daemon.json
+          sudo systemctl restart docker || sudo service docker restart
+          sleep 2
+          echo "Docker DNS configured"
+
+      - name: Verify DNS and ECR connectivity
+        run: |
+          ECR_REGISTRY=${{ secrets.ECR_REPO }}
+          ECR_REGISTRY="${ECR_REGISTRY%%/*}"
+          echo "Testing DNS resolution for: $ECR_REGISTRY"
+          nslookup $ECR_REGISTRY || dig $ECR_REGISTRY || echo "DNS test completed"
+          echo "Testing connectivity to ECR..."
+          curl -I https://$ECR_REGISTRY || echo "Connectivity test completed"
+
       - name: Authenticate Docker to ECR
         run: |
           ECR_REGISTRY=${{ secrets.ECR_REPO }}
           ECR_REGISTRY="${ECR_REGISTRY%%/*}"
+          echo "Logging into ECR registry: $ECR_REGISTRY"
           aws ecr get-login-password --region ${{ secrets.AWS_DEFAULT_REGION }} | \
             docker login --username AWS --password-stdin "$ECR_REGISTRY"
 
@@ -106,10 +125,29 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
+      - name: Configure Docker DNS
+        run: |
+          # Fix Docker DNS issues by configuring daemon.json
+          sudo mkdir -p /etc/docker
+          echo '{"dns": ["8.8.8.8", "8.8.4.4"]}' | sudo tee /etc/docker/daemon.json
+          sudo systemctl restart docker || sudo service docker restart
+          sleep 2
+          echo "Docker DNS configured"
+
+      - name: Verify DNS and ECR connectivity
+        run: |
+          ECR_REGISTRY=${{ secrets.ECR_REPO }}
+          ECR_REGISTRY="${ECR_REGISTRY%%/*}"
+          echo "Testing DNS resolution for: $ECR_REGISTRY"
+          nslookup $ECR_REGISTRY || dig $ECR_REGISTRY || echo "DNS test completed"
+          echo "Testing connectivity to ECR..."
+          curl -I https://$ECR_REGISTRY || echo "Connectivity test completed"
+
       - name: Authenticate Docker to ECR
         run: |
           ECR_REGISTRY=${{ secrets.ECR_REPO }}
           ECR_REGISTRY="${ECR_REGISTRY%%/*}"
+          echo "Logging into ECR registry: $ECR_REGISTRY"
           aws ecr get-login-password --region ${{ secrets.AWS_DEFAULT_REGION }} | \
             docker login --username AWS --password-stdin "$ECR_REGISTRY"
 
