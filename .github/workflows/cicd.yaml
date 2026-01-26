@@ -267,11 +267,36 @@ jobs:
       - name: Verify deployment
         run: |
           sleep 5
+          echo "=== Container Status ==="
+          docker ps -a | grep medical-chatbot || echo "No container found"
+          
+          echo ""
+          echo "=== All Running Containers ==="
+          docker ps
+          
+          echo ""
+          echo "=== Container Logs (last 50 lines) ==="
+          docker logs --tail 50 medical-chatbot 2>&1 || echo "Could not retrieve logs"
+          
+          echo ""
+          echo "=== Testing Application Locally ==="
+          curl -v http://localhost:5000/health 2>&1 || echo "Health check failed"
+          curl -v http://localhost:5000/ 2>&1 | head -20 || echo "Root endpoint failed"
+          
+          echo ""
+          echo "=== Network Status ==="
+          sudo ss -tlnp | grep 5000 || echo "Port 5000 not listening"
+          
+          echo ""
+          echo "=== Public IP Address ==="
+          curl -s http://169.254.169.254/latest/meta-data/public-ipv4 || echo "Could not retrieve public IP"
+          
+          echo ""
+          echo "=== Final Status Check ==="
           if docker ps | grep -q medical-chatbot; then
             echo "✅ Deployment successful! Container is running."
             docker ps | grep medical-chatbot
           else
             echo "❌ Deployment failed! Container is not running."
-            docker logs medical-chatbot
             exit 1
           fi
