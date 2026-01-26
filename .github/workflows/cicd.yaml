@@ -76,22 +76,26 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Verify DNS and ECR connectivity
+      - name: Verify ECR Registry
         run: |
-          ECR_REGISTRY=${{ secrets.ECR_REPO }}
-          ECR_REGISTRY="${ECR_REGISTRY%%/*}"
-          echo "Testing DNS resolution for: $ECR_REGISTRY"
+          # Get registry from action output (correct format)
+          ECR_REGISTRY=${{ steps.login-ecr.outputs.registry }}
+          echo "ECR Registry from action: $ECR_REGISTRY"
+          
+          # Also get full repo URI from secret
+          ECR_REPO=${{ secrets.ECR_REPO }}
+          echo "ECR Repository URI: $ECR_REPO"
+          
+          # Verify the registry format
+          if [[ ! "$ECR_REGISTRY" =~ ^[0-9]+\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com$ ]]; then
+            echo "ERROR: Invalid ECR registry format: $ECR_REGISTRY"
+            echo "Expected format: ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com"
+            exit 1
+          fi
+          
+          # Test DNS resolution
+          echo "Testing DNS resolution for registry..."
           nslookup $ECR_REGISTRY || dig $ECR_REGISTRY || echo "DNS test completed"
-          echo "Testing connectivity to ECR..."
-          curl -I https://$ECR_REGISTRY || echo "Connectivity test completed"
-
-      - name: Authenticate Docker to ECR
-        run: |
-          ECR_REGISTRY=${{ secrets.ECR_REPO }}
-          ECR_REGISTRY="${ECR_REGISTRY%%/*}"
-          echo "Logging into ECR registry: $ECR_REGISTRY"
-          aws ecr get-login-password --region ${{ secrets.AWS_DEFAULT_REGION }} | \
-            docker login --username AWS --password-stdin "$ECR_REGISTRY"
 
       - name: Build Docker image
         run: |
@@ -170,22 +174,26 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Verify DNS and ECR connectivity
+      - name: Verify ECR Registry
         run: |
-          ECR_REGISTRY=${{ secrets.ECR_REPO }}
-          ECR_REGISTRY="${ECR_REGISTRY%%/*}"
-          echo "Testing DNS resolution for: $ECR_REGISTRY"
+          # Get registry from action output (correct format)
+          ECR_REGISTRY=${{ steps.login-ecr.outputs.registry }}
+          echo "ECR Registry from action: $ECR_REGISTRY"
+          
+          # Also get full repo URI from secret
+          ECR_REPO=${{ secrets.ECR_REPO }}
+          echo "ECR Repository URI: $ECR_REPO"
+          
+          # Verify the registry format
+          if [[ ! "$ECR_REGISTRY" =~ ^[0-9]+\.dkr\.ecr\.[a-z0-9-]+\.amazonaws\.com$ ]]; then
+            echo "ERROR: Invalid ECR registry format: $ECR_REGISTRY"
+            echo "Expected format: ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com"
+            exit 1
+          fi
+          
+          # Test DNS resolution
+          echo "Testing DNS resolution for registry..."
           nslookup $ECR_REGISTRY || dig $ECR_REGISTRY || echo "DNS test completed"
-          echo "Testing connectivity to ECR..."
-          curl -I https://$ECR_REGISTRY || echo "Connectivity test completed"
-
-      - name: Authenticate Docker to ECR
-        run: |
-          ECR_REGISTRY=${{ secrets.ECR_REPO }}
-          ECR_REGISTRY="${ECR_REGISTRY%%/*}"
-          echo "Logging into ECR registry: $ECR_REGISTRY"
-          aws ecr get-login-password --region ${{ secrets.AWS_DEFAULT_REGION }} | \
-            docker login --username AWS --password-stdin "$ECR_REGISTRY"
 
       - name: Pull image from ECR
         run: |
