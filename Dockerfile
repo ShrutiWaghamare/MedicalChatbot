@@ -22,15 +22,13 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel \
     && pip cache purge || true
 
 # Copy dependency files first (better layer caching)
-COPY requirements.txt setup.py ./
+COPY requirements.txt requirements-docker.txt setup.py ./
 COPY src ./src
 
 # Install Python dependencies with CPU-only torch
-# Force CPU-only installation to avoid CUDA dependencies
-# Install Flask first so the app always has it (avoids ModuleNotFoundError in container)
+# Use requirements-docker.txt (no -e .) so all deps install reliably in container
 RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu \
-    && pip install --no-cache-dir "flask>=3.0.0" \
-    && pip install --no-cache-dir -r requirements.txt \
+    && pip install --no-cache-dir -r requirements-docker.txt \
     && pip cache purge || true \
     && rm -rf /tmp/* \
     && rm -rf /var/tmp/* \
