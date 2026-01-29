@@ -58,10 +58,10 @@ def initialize_chatbot():
         text_key="text"
     )
     
-    # Create retriever (reads from existing index)
+    # Create retriever (k=1 = faster retrieval; still good for short answers)
     retriever = docsearch.as_retriever(
         search_type="similarity",
-        search_kwargs={"k": 3}
+        search_kwargs={"k": 1}
     )
     
     # Initialize Azure OpenAI chat model
@@ -70,7 +70,8 @@ def initialize_chatbot():
         api_version="2024-02-15-preview",
         azure_endpoint=AZURE_OPENAI_ENDPOINT,
         api_key=AZURE_OPENAI_API_KEY,
-        temperature=1
+        temperature=1,
+        max_completion_tokens=800
     )
     
     # Create prompt template
@@ -102,8 +103,8 @@ def get_response(question: str, session_id: str = "default") -> str:
         # Add user message to memory
         conversation_memory.add_message(session_id, 'user', question)
         
-        # Get conversation history
-        history = conversation_memory.get_formatted_history(session_id)
+        # Get conversation history (limit turns for faster response)
+        history = conversation_memory.get_formatted_history(session_id, max_turns=2)
         
         # Build context with conversation history
         if history:
@@ -124,3 +125,46 @@ def get_response(question: str, session_id: str = "default") -> str:
         error_msg = f"Sorry, I encountered an error: {str(e)}"
         conversation_memory.add_message(session_id, 'assistant', error_msg)
         return error_msg
+
+
+def get_response_stream(question: str, session_id: str = "default"):
+    """
+    Stream response from the chatbot token-by-token for faster perceived response.
+    Yields chunks of the answer; saves full answer to memory when done.
+    Falls back to non-streaming if stream not supported.
+    """
+    try:
+        conversation_memory.add_message(session_id, 'user', question)
+        history = conversation_memory.get_formatted_history(session_id, max_turns=2)
+        context_with_history = (
+            f"Previous conversation:\n{history}\n\nCurrent question: {question}"
+            if history else question
+        )
+        rag_chain = initialize_chatbot()
+        full_answer = ""
+        try:
+            for chunk in rag_chain.stream({"input": context_with_history}):
+                part = chunk.get("answer", "") if isinstance(chunk, dict) else ""
+                if isinstance(part, str) and part:
+                    if part.startswith(full_answer):
+                        delta = part[len(full_answer):]
+                        full_answer = part
+                    else:
+                        delta = part
+                        full_answer += part
+                    if delta:
+                        yield delta
+        except (TypeError, AttributeError):
+            # Chain may not support .stream(); fall back to invoke and yield once
+            response = rag_chain.invoke({"input": context_with_history})
+            answer = response.get("answer", "") or ""
+            if answer:
+                conversation_memory.add_message(session_id, 'assistant', answer)
+                yield answer
+            return
+        if full_answer:
+            conversation_memory.add_message(session_id, 'assistant', full_answer)
+    except Exception as e:
+        error_msg = f"Sorry, I encountered an error: {str(e)}"
+        conversation_memory.add_message(session_id, 'assistant', error_msg)
+        yield error_msg

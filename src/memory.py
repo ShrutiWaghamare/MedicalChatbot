@@ -73,12 +73,14 @@ class ConversationMemory:
             del self.memories[session_id]
         delete_messages(session_id)
     
-    def get_formatted_history(self, session_id: str) -> str:
+    def get_formatted_history(self, session_id: str, max_turns: int = 3) -> str:
         """
         Get formatted conversation history as a string for LLM context.
+        Limits to last max_turns exchanges for faster responses.
         
         Args:
             session_id: Unique session identifier
+            max_turns: Max number of user+assistant pairs to include (default 3)
             
         Returns:
             Formatted conversation history string
@@ -86,12 +88,13 @@ class ConversationMemory:
         history = self.get_conversation_history(session_id)
         if not history:
             return ""
-        
+        # Keep only last N messages (2 per turn)
+        keep = max_turns * 2
+        history = history[-keep:] if len(history) > keep else history
         formatted = []
         for msg in history:
             role = "Human" if msg['role'] == 'user' else "Assistant"
             formatted.append(f"{role}: {msg['content']}")
-        
         return "\n".join(formatted)
 
 

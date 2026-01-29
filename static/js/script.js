@@ -9,7 +9,10 @@ const clearButton = document.getElementById('clearButton');
 const suggestedPrompts = document.getElementById('suggestedPrompts');
 const themeToggleSmall = document.getElementById('themeToggleSmall');
 const themeIconSmall = document.getElementById('themeIconSmall');
-// Chat history UI removed; backend still stores conversations for internal use
+const historyToggle = document.getElementById('historyToggle');
+const historyDrawer = document.getElementById('historyDrawer');
+const historyClose = document.getElementById('historyClose');
+const historyTableBody = document.getElementById('historyTableBody');
 // Chatbot is Q&A only (no file upload)
 
 let messageIdCounter = 0;
@@ -45,6 +48,18 @@ document.addEventListener('DOMContentLoaded', () => {
     // Clear conversation
     clearButton.addEventListener('click', clearConversation);
 
+    if (historyToggle && historyDrawer && historyClose) {
+        historyToggle.addEventListener('click', async () => {
+            historyDrawer.classList.add('open');
+            historyDrawer.setAttribute('aria-hidden', 'false');
+            await loadHistoryTable();
+        });
+        historyClose.addEventListener('click', () => {
+            historyDrawer.classList.remove('open');
+            historyDrawer.setAttribute('aria-hidden', 'true');
+        });
+    }
+
     // Suggested prompts
     document.querySelectorAll('.prompt-chip').forEach(chip => {
         chip.addEventListener('click', () => {
@@ -60,6 +75,39 @@ document.addEventListener('DOMContentLoaded', () => {
     loadAllReactions();
     
 });
+
+// Render message content for history: escape HTML, convert **bold** to <strong>, newlines to <br>
+function renderHistoryMessageContent(text) {
+    if (!text) return '';
+    const escaped = escapeHtml(text);
+    const withBold = escaped.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    return withBold.replace(/\n/g, '<br>');
+}
+
+async function loadHistoryTable() {
+    if (!historyTableBody) return;
+    historyTableBody.innerHTML = '<tr><td colspan="3" class="history-empty">Loading...</td></tr>';
+    try {
+        const res = await fetch('/api/history');
+        const data = await res.json();
+        if (!data.success || !data.messages || data.messages.length === 0) {
+            historyTableBody.innerHTML = '<tr><td colspan="3" class="history-empty">No messages yet.</td></tr>';
+            return;
+        }
+        historyTableBody.innerHTML = data.messages.map((m) => {
+            const roleClass = m.role === 'user' ? 'history-role-user' : 'history-role-assistant';
+            const timeStr = m.timestamp ? new Date(m.timestamp).toLocaleString() : '';
+            const contentHtml = renderHistoryMessageContent(m.content);
+            return `<tr>
+                <td class="history-time">${escapeHtml(timeStr)}</td>
+                <td class="history-role ${roleClass}">${escapeHtml(m.role)}</td>
+                <td class="history-message-cell"><div class="history-message-content">${contentHtml}</div></td>
+            </tr>`;
+        }).join('');
+    } catch (e) {
+        historyTableBody.innerHTML = '<tr><td colspan="3" class="history-empty">Failed to load history.</td></tr>';
+    }
+}
 
 // Load reactions for all existing messages
 function loadAllReactions() {
@@ -310,62 +358,81 @@ async function handleSubmit(e) {
     // Show typing indicator
     showTypingIndicator();
     
-    // Track request state
-    let botMessageId = null;
     let hasError = false;
     
     try {
-        // Send request to backend with retry logic
-        const response = await fetchWithRetry('/api/chat', {
+        // Use streaming endpoint for faster perceived response (text appears as it's generated)
+        const response = await fetch('/api/chat/stream', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ question: question })
         });
         
-        const data = await response.json();
+        if (!response.ok) {
+            const errData = await response.json().catch(() => ({}));
+            throw new Error(errData.error || `HTTP ${response.status}`);
+        }
         
-        // Hide typing indicator
+        const { messageDiv, messageTextDiv, messageId } = addMessageStreamingStart();
         hideTypingIndicator();
         
-        if (data.success) {
-            // Add bot response
-            botMessageId = addMessage(data.answer, 'bot');
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let fullText = '';
+        // Render markdown as we stream so **bold** and ### show formatted, not raw
+        function renderStreamMarkdown(text) {
+            if (!text || !text.trim()) {
+                messageTextDiv.textContent = text;
+                return;
+            }
+            try {
+                const renderer = new marked.Renderer();
+                renderer.code = function(code, lang, escaped) {
+                    const langClass = lang ? `language-${lang}` : 'language-text';
+                    return `<pre class="${langClass}"><code class="${langClass}">${escaped ? code : escapeHtml(code)}</code></pre>`;
+                };
+                marked.setOptions({ breaks: true, gfm: true, renderer });
+                messageTextDiv.innerHTML = marked.parse(text);
+            } catch (e) {
+                messageTextDiv.textContent = text;
+            }
+        }
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const chunk = decoder.decode(value, { stream: true });
+            fullText += chunk;
+            renderStreamMarkdown(fullText);
+            scrollToBottom();
+        }
+        
+        if (fullText && fullText.trim()) {
+            finalizeStreamingMessage(messageDiv, messageTextDiv, messageId);
             updateConnectionStatus(true);
         } else {
-            // Show error message with retry option
+            messageDiv.remove();
             hasError = true;
-            const errorMsg = data.error || 'Something went wrong. Please try again.';
-            botMessageId = addMessage(`Error: ${errorMsg}`, 'bot', true, true, question);
-            showToast(errorMsg, 'error');
+            addMessage('No response received. Please try again.', 'bot', true, true, question);
+            showToast('No response received', 'error');
             updateConnectionStatus(false);
         }
     } catch (error) {
         hideTypingIndicator();
         hasError = true;
-        
-        // Determine error type and message
         let errorMsg = 'An error occurred. Please try again.';
-        let errorType = 'error';
-        
         if (error.message.includes('timeout')) {
-            errorMsg = 'Request timed out. The server is taking too long to respond.';
-            errorType = 'timeout';
+            errorMsg = 'Request timed out. Please try again.';
         } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-            errorMsg = 'Network error. Please check your internet connection.';
-            errorType = 'network';
-        } else if (error.message.includes('HTTP')) {
-            errorMsg = `Server error: ${error.message}`;
-            errorType = 'server';
+            errorMsg = 'Network error. Please check your connection.';
+        } else if (error.message) {
+            errorMsg = error.message;
         }
-        
-        botMessageId = addMessage(errorMsg, 'bot', true, true, question);
+        addMessage(errorMsg, 'bot', true, true, question);
         showToast(errorMsg, 'error');
         updateConnectionStatus(false);
         console.error('Error:', error);
     } finally {
-        // Re-enable input
         userInput.disabled = false;
         sendButton.disabled = false;
         userInput.focus();
@@ -430,6 +497,75 @@ setInterval(checkConnectionStatus, 30000);
 
 // Store original questions for retry
 const messageQuestions = new Map();
+
+// Create an empty bot message for streaming; returns { messageDiv, messageTextDiv } for appending chunks
+function addMessageStreamingStart() {
+    const messageDiv = document.createElement('div');
+    const messageId = `msg-${++messageIdCounter}`;
+    messageDiv.className = 'message bot-message';
+    messageDiv.setAttribute('data-message-id', messageId);
+    const avatar = document.createElement('div');
+    avatar.className = 'message-avatar';
+    avatar.innerHTML = '<i class="fas fa-robot"></i>';
+    const content = document.createElement('div');
+    content.className = 'message-content';
+    const messageText = document.createElement('div');
+    messageText.className = 'message-text';
+    const messageTime = document.createElement('div');
+    messageTime.className = 'message-time';
+    messageTime.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    content.appendChild(messageText);
+    content.appendChild(messageTime);
+    messageDiv.appendChild(avatar);
+    messageDiv.appendChild(content);
+    chatMessages.appendChild(messageDiv);
+    scrollToBottom();
+    return { messageDiv, messageTextDiv: messageText, messageId };
+}
+
+// Finalize streamed message: render markdown, highlight code, add action buttons
+function finalizeStreamingMessage(messageDiv, messageTextDiv, messageId) {
+    const fullText = messageTextDiv.textContent || '';
+    try {
+        const renderer = new marked.Renderer();
+        renderer.code = function(code, lang, escaped) {
+            const langClass = lang ? `language-${lang}` : 'language-text';
+            return `<pre class="${langClass}"><code class="${langClass}">${escaped ? code : escapeHtml(code)}</code></pre>`;
+        };
+        marked.setOptions({ breaks: true, gfm: true, renderer });
+        messageTextDiv.innerHTML = marked.parse(fullText);
+        setTimeout(() => highlightCodeBlocks(messageTextDiv), 50);
+    } catch (e) {
+        messageTextDiv.innerHTML = formatMessage(fullText);
+    }
+    const messageActions = document.createElement('div');
+    messageActions.className = 'message-actions';
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'action-btn';
+    copyBtn.setAttribute('onclick', 'copyMessage(this)');
+    copyBtn.setAttribute('title', 'Copy message');
+    copyBtn.innerHTML = '<i class="fas fa-copy"></i>';
+    messageActions.appendChild(copyBtn);
+    const likeBtn = document.createElement('button');
+    likeBtn.className = 'action-btn reaction-btn';
+    likeBtn.setAttribute('onclick', "handleReaction(this, 'like')");
+    likeBtn.setAttribute('title', 'Helpful');
+    likeBtn.setAttribute('data-reaction', 'like');
+    likeBtn.setAttribute('data-message-id', messageId);
+    likeBtn.innerHTML = '<i class="fas fa-thumbs-up"></i>';
+    const dislikeBtn = document.createElement('button');
+    dislikeBtn.className = 'action-btn reaction-btn';
+    dislikeBtn.setAttribute('onclick', "handleReaction(this, 'dislike')");
+    dislikeBtn.setAttribute('title', 'Not helpful');
+    dislikeBtn.setAttribute('data-reaction', 'dislike');
+    dislikeBtn.setAttribute('data-message-id', messageId);
+    dislikeBtn.innerHTML = '<i class="fas fa-thumbs-down"></i>';
+    messageActions.appendChild(likeBtn);
+    messageActions.appendChild(dislikeBtn);
+    messageDiv.querySelector('.message-content').insertBefore(messageActions, messageDiv.querySelector('.message-time'));
+    loadReaction(messageId, likeBtn, dislikeBtn);
+    scrollToBottom();
+}
 
 // Add message to chat
 function addMessage(text, sender, isError = false, showRetry = false, originalQuestion = null) {

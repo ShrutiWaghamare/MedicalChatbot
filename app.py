@@ -3,8 +3,8 @@ Medical Chatbot - Flask Application
 Main entry point for the web interface.
 Chatbot answers user questions via RAG (no file uploads).
 """
-from flask import Flask, render_template, request, jsonify, session
-from src.chatbot import get_response
+from flask import Flask, render_template, request, jsonify, session, Response, stream_with_context
+from src.chatbot import get_response, get_response_stream
 from src.memory import conversation_memory
 from src.storage import init_db, fetch_messages
 import logging
@@ -65,6 +65,34 @@ def chat():
             'success': False,
             'error': f'An error occurred: {str(e)}'
         }), 500
+
+
+@app.route('/api/chat/stream', methods=['POST'])
+def chat_stream():
+    """Stream chat response for faster perceived reply (text appears as it's generated)."""
+    try:
+        if 'session_id' not in session:
+            session['session_id'] = str(uuid.uuid4())
+        session_id = session['session_id']
+        data = request.get_json() or {}
+        question = (data.get('question') or '').strip()
+        if not question:
+            return jsonify({'success': False, 'error': 'Please provide a question.'}), 400
+        logger.info(f"Session {session_id[:8]}... - Question (stream): {question[:50]}...")
+
+        def generate():
+            for chunk in get_response_stream(question, session_id=session_id):
+                if chunk:
+                    yield chunk.encode('utf-8')
+
+        return Response(
+            stream_with_context(generate()),
+            mimetype='text/plain; charset=utf-8',
+            headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'}
+        )
+    except Exception as e:
+        logger.error(f"Error in stream: {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @app.route('/api/clear', methods=['POST'])

@@ -29,7 +29,10 @@
                 <span>Medical Chatbot</span>
             </div>
             <div class="navbar-links">
-                <a href="https://github.com/ShrutiWaghamare" target="_blank" rel="noopener noreferrer" class="nav-link" title="GitHub">
+                <button class="nav-link history-toggle" id="historyToggle" title="View chat history">
+                    <i class="fas fa-table"></i>
+                </button>
+                <a href="https://github.com/ShrutiWaghamare/MedicalChatbot" target="_blank" rel="noopener noreferrer" class="nav-link" title="GitHub">
                     <i class="fab fa-github"></i>
                 </a>
                 <a href="https://www.linkedin.com/in/shruti-waghamare-641049259/" target="_blank" rel="noopener noreferrer" class="nav-link" title="LinkedIn">
@@ -242,6 +245,35 @@
                 </div>
     </div>
     </div>
+    </div>
+
+    <!-- History Drawer -->
+    <div class="history-drawer" id="historyDrawer" aria-hidden="true">
+        <div class="history-header">
+            <div>
+                <h3>Chat History</h3>
+                <p>Current session</p>
+            </div>
+            <button class="history-close" id="historyClose" title="Close">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="history-table-wrapper">
+            <table class="history-table">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Role</th>
+                        <th>Message</th>
+                    </tr>
+                </thead>
+                <tbody id="historyTableBody">
+                    <tr>
+                        <td colspan="3" class="history-empty">No messages yet.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
     </div>
 
     <!-- Toast Notification -->
