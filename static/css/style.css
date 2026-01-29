@@ -914,24 +914,14 @@ h1, h2, h3, h4, h5, h6 {
     position: relative;
 }
 
+/* Hide scrollbar (no up/down arrows or thumb) - chat still scrolls with mouse/touch */
 .chat-container::-webkit-scrollbar {
-    width: 10px;
+    width: 0;
+    display: none;
 }
-
-.chat-container::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.chat-container::-webkit-scrollbar-thumb {
-    background: var(--border-light);
-    border-radius: 5px;
-    border: 2px solid transparent;
-    background-clip: padding-box;
-}
-
-.chat-container::-webkit-scrollbar-thumb:hover {
-    background: var(--text-muted);
-    background-clip: padding-box;
+.chat-container {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
 }
 
 /* Messages */

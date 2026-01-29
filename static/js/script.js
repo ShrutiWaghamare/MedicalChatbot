@@ -87,10 +87,13 @@ async function loadHistoryTable() {
             return;
         }
         historyTableBody.innerHTML = data.messages.map((m) => {
+            const content = m.role === 'assistant' && typeof marked !== 'undefined'
+                ? (() => { try { return marked.parse(m.content); } catch (e) { return escapeHtml(m.content); } })()
+                : escapeHtml(m.content);
             return `<tr>
                 <td>${new Date(m.timestamp).toLocaleString()}</td>
                 <td>${m.role}</td>
-                <td>${escapeHtml(m.content)}</td>
+                <td class="history-content">${content}</td>
             </tr>`;
         }).join('');
     } catch (e) {
