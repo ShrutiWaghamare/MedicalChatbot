@@ -2,7 +2,7 @@
 
 ## 📌 Overview
 
-A Medical Chatbot built using **LangChain**, **Azure OpenAI (LLM only)**, **Pinecone**, and **Flask**, with **AWS CI/CD deployment using GitHub Actions**.
+A Medical Chatbot built using **LangChain**, **Azure OpenAI (LLM only)**, **Pinecone**, and **Flask**, with **Azure CI/CD deployment** using GitHub Actions.
 
 ---
 
@@ -14,7 +14,9 @@ A Medical Chatbot built using **LangChain**, **Azure OpenAI (LLM only)**, **Pine
 * Azure OpenAI (LLM only)
 * Pinecone
 * Docker
-* AWS (EC2, ECR, IAM)
+* **Azure Cloud Platform:**
+  * Azure Container Apps (Serverless containers)
+  * Azure Container Registry (ACR)
 * GitHub Actions (CI/CD)
 
 ---
@@ -45,14 +47,18 @@ Create a `.env` file in the **root directory** and add:
 ```env
 PINECONE_API_KEY="xxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 AZURE_OPENAI_API_KEY="xxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+AZURE_OPENAI_ENDPOINT="https://your-endpoint.azure.com/"
+SECRET_KEY="generate-a-random-secret-key-min-32-chars"
 ```
+
+**Note:** This project uses **Azure OpenAI** (not OpenAI API). Get your keys from Azure Portal → Your OpenAI resource.
 
 ---
 
 ### **STEP 04: Store Embeddings in Pinecone**
 
 ```bash
-python store_index.py
+python src/store_index.py
 ```
 
 ---
@@ -73,99 +79,96 @@ http://localhost:5000
 
 ---
 
-## ☁️ AWS CI/CD Deployment with GitHub Actions
+## ☁️ Azure CI/CD Deployment with GitHub Actions
 
-### **STEP 01: Login to AWS Console**
+### **⭐ Recommended Plan: Azure Container Apps**
 
----
+For detailed Azure deployment instructions, see **[AZURE_DEPLOYMENT_PLAN.md](AZURE_DEPLOYMENT_PLAN.md)**
 
-### **STEP 02: Create IAM User (For Deployment)**
+**Why Container Apps?**
+- ✅ **FREE for first 12 months** (generous free tier allowances)
+- ✅ Serverless - Pay only when running
+- ✅ Auto-scaling to zero when idle
+- ✅ Built-in HTTPS
+- ✅ Cost-effective (~$0/month with free tier, ~$5-20/month after)
+- ✅ Modern platform for containers
 
-Attach the following policies:
-
-* `AmazonEC2FullAccess`
-* `AmazonEC2ContainerRegistryFullAccess`
-
----
-
-### **STEP 03: Create an ECR Repository**
-
-Save the repository URI:
-
-```
-315865595366.dkr.ecr.us-east-1.amazonaws.com/medicalbot
-```
+**💡 Free Tier Info:** See [AZURE_FREE_TIER.md](AZURE_FREE_TIER.md) for details on deploying for FREE!
 
 ---
 
-### **STEP 04: Create an EC2 Instance**
+### **Quick Setup Steps**
 
-* OS: **Ubuntu**
-* Instance Type: As per requirement
+#### **Option 1: Automated Setup (Recommended)**
 
----
+1. **Run the setup script:**
+   ```bash
+   chmod +x azure-setup.sh
+   ./azure-setup.sh
+   ```
 
-### **STEP 05: Install Docker on EC2**
+2. **Add GitHub Secrets** (output from script):
+   ```
+   GitHub Repo → Settings → Secrets and variables → Actions
+   ```
 
-```bash
-sudo apt-get update -y
-sudo apt-get upgrade -y
+#### **Option 2: Manual Setup**
 
-curl -fsSL https://get.docker.com -o get-docker.sh
-sudo sh get-docker.sh
+1. **Create Azure Resources:**
+   - Resource Group
+   - Azure Container Registry (ACR)
+   - Container Apps Environment
+   - Container App
 
-sudo usermod -aG docker ubuntu
-newgrp docker
-```
+2. **Create Service Principal:**
+   ```bash
+   az ad sp create-for-rbac --name github-actions-medical-chatbot --role acrpush
+   ```
 
----
+3. **Add GitHub Secrets:**
+   ```
+   AZURE_ACR_NAME
+   AZURE_ACR_LOGIN_SERVER
+   AZURE_CLIENT_ID
+   AZURE_CLIENT_SECRET
+   AZURE_TENANT_ID
+   AZURE_SUBSCRIPTION_ID
+   AZURE_RESOURCE_GROUP
+   AZURE_LOCATION
+   AZURE_CONTAINER_APP_NAME
+   AZURE_CONTAINER_APP_ENV
+   PINECONE_API_KEY
+   AZURE_OPENAI_API_KEY
+   AZURE_OPENAI_ENDPOINT
+   SECRET_KEY
+   ```
 
-### **STEP 06: Configure EC2 as Self-Hosted GitHub Runner**
-
-Go to:
-
-```
-GitHub Repo → Settings → Actions → Runners → New self-hosted runner
-```
-
-* Choose OS: **Linux**
-* Run the commands **one by one** on EC2
-
----
-
-### **STEP 07: Configure GitHub Secrets**
-
-Add the following secrets in:
-
-```
-GitHub Repo → Settings → Secrets → Actions
-```
-
-```
-AWS_ACCESS_KEY_ID
-AWS_SECRET_ACCESS_KEY
-AWS_DEFAULT_REGION
-ECR_REPO
-PINECONE_API_KEY
-AZURE_OPENAI_API_KEY
-```
+4. **Deploy:**
+   - Push to `main` branch (auto-deploys to Container Apps)
+   - Or use manual workflow dispatch
 
 ---
 
 ## 📦 Deployment Flow (Behind the Scenes)
 
 1. Build Docker image of the source code
-2. Push Docker image to AWS ECR
-3. Launch EC2 instance
-4. Pull Docker image from ECR
-5. Run Docker container on EC2
+2. Push Docker image to Azure Container Registry (ACR)
+3. Deploy to Azure Container Apps
+4. Application is accessible via HTTPS URL
 
 ---
 
-## ✅ You’re All Set!
+## ✅ You're All Set!
 
 Your Medical Chatbot will now be:
 
 * Running locally via Flask
-* Deployed on AWS using Docker + GitHub Actions
+* Deployed on **Azure Container Apps** using Docker + GitHub Actions
 
+---
+
+## 📚 Additional Resources
+
+- **📖 Complete Deployment Guide:** [NEXT_STEPS.md](NEXT_STEPS.md) - **START HERE for step-by-step deployment instructions**
+- **Workflow File:** `.github/workflows/azure-cicd.yaml`
+- **Setup Script:** `azure-setup.sh`

@@ -1,0 +1,231 @@
+name: CI/CD - Build, Push to ACR & Deploy to Azure
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      deployment_target:
+        description: 'Deployment Target'
+        required: true
+        default: 'container-apps'
+        type: choice
+        options:
+          - container-apps
+          - app-service
+          - container-instances
+
+env:
+  IMAGE_NAME: medical-chatbot
+  ACR_NAME: ${{ secrets.AZURE_ACR_NAME }}
+  ACR_LOGIN_SERVER: ${{ secrets.AZURE_ACR_LOGIN_SERVER }}
+  RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
+  LOCATION: ${{ secrets.AZURE_LOCATION }}
+
+jobs:
+  continuous-integration:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Azure
+        uses: azure/login@v1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Log in to Azure Container Registry
+        run: |
+          az acr login --name ${{ env.ACR_NAME }}
+
+      - name: Build and push Docker image to ACR
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:latest
+            ${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          cache-from: type=registry,ref=${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:buildcache
+          cache-to: type=registry,ref=${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
+
+      - name: Verify image in ACR
+        run: |
+          echo "Verifying image push..."
+          az acr repository show-tags --name ${{ env.ACR_NAME }} --repository ${{ env.IMAGE_NAME }} --output table
+
+  continuous-deployment-container-apps:
+    needs: continuous-integration
+    runs-on: ubuntu-latest
+    if: github.event.inputs.deployment_target == 'container-apps' || (github.event.inputs.deployment_target == '' && github.ref == 'refs/heads/main')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to Azure
+        uses: azure/login@v1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy to Azure Container Apps
+        run: |
+          CONTAINER_APP_NAME=${{ secrets.AZURE_CONTAINER_APP_NAME }}
+          CONTAINER_APP_ENV=${{ secrets.AZURE_CONTAINER_APP_ENV }}
+          
+          echo "Deploying to Azure Container Apps..."
+          
+          # Update container app with new image
+          az containerapp update \
+            --name $CONTAINER_APP_NAME \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --image ${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:latest \
+            --registry-server ${{ env.ACR_LOGIN_SERVER }} \
+            --registry-username ${{ secrets.AZURE_CLIENT_ID }} \
+            --registry-password ${{ secrets.AZURE_CLIENT_SECRET }} \
+            --set-env-vars \
+              PINECONE_API_KEY="${{ secrets.PINECONE_API_KEY }}" \
+              AZURE_OPENAI_API_KEY="${{ secrets.AZURE_OPENAI_API_KEY }}" \
+              AZURE_OPENAI_ENDPOINT="${{ secrets.AZURE_OPENAI_ENDPOINT }}" \
+              SECRET_KEY="${{ secrets.SECRET_KEY }}"
+
+      - name: Get Container App URL
+        run: |
+          CONTAINER_APP_NAME=${{ secrets.AZURE_CONTAINER_APP_NAME }}
+          URL=$(az containerapp show \
+            --name $CONTAINER_APP_NAME \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --query properties.configuration.ingress.fqdn \
+            --output tsv)
+          echo "🚀 Application deployed at: https://$URL"
+          echo "::notice::Application URL: https://$URL"
+
+      - name: Verify deployment
+        run: |
+          CONTAINER_APP_NAME=${{ secrets.AZURE_CONTAINER_APP_NAME }}
+          echo "Checking container app status..."
+          az containerapp show \
+            --name $CONTAINER_APP_NAME \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --query "{Name:name, Status:properties.provisioningState, URL:properties.configuration.ingress.fqdn}" \
+            --output table
+
+  continuous-deployment-app-service:
+    needs: continuous-integration
+    runs-on: ubuntu-latest
+    if: github.event.inputs.deployment_target == 'app-service'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to Azure
+        uses: azure/login@v1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy to Azure App Service
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: ${{ secrets.AZURE_APP_SERVICE_NAME }}
+          resource-group: ${{ env.RESOURCE_GROUP }}
+          images: ${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:latest
+
+      - name: Configure App Settings
+        run: |
+          az webapp config appsettings set \
+            --name ${{ secrets.AZURE_APP_SERVICE_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --settings \
+              PINECONE_API_KEY="${{ secrets.PINECONE_API_KEY }}" \
+              AZURE_OPENAI_API_KEY="${{ secrets.AZURE_OPENAI_API_KEY }}" \
+              AZURE_OPENAI_ENDPOINT="${{ secrets.AZURE_OPENAI_ENDPOINT }}" \
+              SECRET_KEY="${{ secrets.SECRET_KEY }}" \
+              WEBSITES_PORT=5000 \
+            --output table
+
+      - name: Restart App Service
+        run: |
+          az webapp restart \
+            --name ${{ secrets.AZURE_APP_SERVICE_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }}
+
+      - name: Get App Service URL
+        run: |
+          URL=$(az webapp show \
+            --name ${{ secrets.AZURE_APP_SERVICE_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --query defaultHostName \
+            --output tsv)
+          echo "🚀 Application deployed at: https://$URL"
+          echo "::notice::Application URL: https://$URL"
+
+  continuous-deployment-container-instances:
+    needs: continuous-integration
+    runs-on: ubuntu-latest
+    if: github.event.inputs.deployment_target == 'container-instances'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to Azure
+        uses: azure/login@v1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Stop existing container instance (if exists)
+        run: |
+          az container delete \
+            --name ${{ secrets.AZURE_CONTAINER_INSTANCE_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --yes \
+            || echo "Container instance does not exist, skipping deletion"
+
+      - name: Deploy to Azure Container Instances
+        run: |
+          az container create \
+            --name ${{ secrets.AZURE_CONTAINER_INSTANCE_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --image ${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:latest \
+            --registry-login-server ${{ env.ACR_LOGIN_SERVER }} \
+            --registry-username ${{ secrets.AZURE_CLIENT_ID }} \
+            --registry-password ${{ secrets.AZURE_CLIENT_SECRET }} \
+            --dns-name-label ${{ secrets.AZURE_CONTAINER_INSTANCE_NAME }} \
+            --ports 5000 \
+            --cpu 1 \
+            --memory 1.5 \
+            --environment-variables \
+              PINECONE_API_KEY="${{ secrets.PINECONE_API_KEY }}" \
+              AZURE_OPENAI_API_KEY="${{ secrets.AZURE_OPENAI_API_KEY }}" \
+              AZURE_OPENAI_ENDPOINT="${{ secrets.AZURE_OPENAI_ENDPOINT }}" \
+              SECRET_KEY="${{ secrets.SECRET_KEY }}" \
+            --output table
+
+      - name: Get Container Instance URL
+        run: |
+          FQDN=$(az container show \
+            --name ${{ secrets.AZURE_CONTAINER_INSTANCE_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --query ipAddress.fqdn \
+            --output tsv)
+          IP=$(az container show \
+            --name ${{ secrets.AZURE_CONTAINER_INSTANCE_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --query ipAddress.ip \
+            --output tsv)
+          echo "🚀 Application deployed at: http://$FQDN:5000"
+          echo "🚀 Or directly at: http://$IP:5000"
+          echo "::notice::Application URL: http://$FQDN:5000"
