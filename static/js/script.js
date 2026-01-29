@@ -9,10 +9,7 @@ const clearButton = document.getElementById('clearButton');
 const suggestedPrompts = document.getElementById('suggestedPrompts');
 const themeToggleSmall = document.getElementById('themeToggleSmall');
 const themeIconSmall = document.getElementById('themeIconSmall');
-const historyToggle = document.getElementById('historyToggle');
-const historyDrawer = document.getElementById('historyDrawer');
-const historyClose = document.getElementById('historyClose');
-const historyTableBody = document.getElementById('historyTableBody');
+// Chat history UI removed; backend still stores conversations for internal use
 // Chatbot is Q&A only (no file upload)
 
 let messageIdCounter = 0;
@@ -48,18 +45,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // Clear conversation
     clearButton.addEventListener('click', clearConversation);
 
-    if (historyToggle && historyDrawer && historyClose) {
-        historyToggle.addEventListener('click', async () => {
-            historyDrawer.classList.add('open');
-            historyDrawer.setAttribute('aria-hidden', 'false');
-            await loadHistoryTable();
-        });
-        historyClose.addEventListener('click', () => {
-            historyDrawer.classList.remove('open');
-            historyDrawer.setAttribute('aria-hidden', 'true');
-        });
-    }
-
     // Suggested prompts
     document.querySelectorAll('.prompt-chip').forEach(chip => {
         chip.addEventListener('click', () => {
@@ -75,28 +60,6 @@ document.addEventListener('DOMContentLoaded', () => {
     loadAllReactions();
     
 });
-
-async function loadHistoryTable() {
-    if (!historyTableBody) return;
-    historyTableBody.innerHTML = '<tr><td colspan="3">Loading...</td></tr>';
-    try {
-        const res = await fetch('/api/history');
-        const data = await res.json();
-        if (!data.success || !data.messages || data.messages.length === 0) {
-            historyTableBody.innerHTML = '<tr><td colspan="3">No messages yet.</td></tr>';
-            return;
-        }
-        historyTableBody.innerHTML = data.messages.map((m) => {
-            return `<tr>
-                <td>${new Date(m.timestamp).toLocaleString()}</td>
-                <td>${m.role}</td>
-                <td>${escapeHtml(m.content)}</td>
-            </tr>`;
-        }).join('');
-    } catch (e) {
-        historyTableBody.innerHTML = '<tr><td colspan="3">Failed to load history.</td></tr>';
-    }
-}
 
 // Load reactions for all existing messages
 function loadAllReactions() {
