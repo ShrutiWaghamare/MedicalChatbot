@@ -85,7 +85,7 @@ jobs:
             --resource-group ${{ env.RESOURCE_GROUP }} \
             --server ${{ env.ACR_LOGIN_SERVER }} \
             --username ${{ secrets.AZURE_CLIENT_ID }} \
-            --password-secret acr-password
+            --password ${{ secrets.AZURE_CLIENT_SECRET }}
 
       - name: Deploy to Azure Container Apps
         run: |
