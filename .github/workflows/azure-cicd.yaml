@@ -72,6 +72,21 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
+      - name: Set ACR credentials on Container App
+        run: |
+          CONTAINER_APP_NAME=${{ secrets.AZURE_CONTAINER_APP_NAME }}
+          echo "Setting registry credentials so the app can pull from ACR..."
+          az containerapp secret set \
+            --name $CONTAINER_APP_NAME \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --secrets acr-password="${{ secrets.AZURE_CLIENT_SECRET }}"
+          az containerapp registry set \
+            --name $CONTAINER_APP_NAME \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --server ${{ env.ACR_LOGIN_SERVER }} \
+            --username ${{ secrets.AZURE_CLIENT_ID }} \
+            --password-secret acr-password
+
       - name: Deploy to Azure Container Apps
         run: |
           CONTAINER_APP_NAME=${{ secrets.AZURE_CONTAINER_APP_NAME }}
@@ -79,7 +94,6 @@ jobs:
           
           echo "Deploying to Azure Container Apps..."
           
-          # Registry is already configured on the app; only update image and env vars
           az containerapp update \
             --name $CONTAINER_APP_NAME \
             --resource-group ${{ env.RESOURCE_GROUP }} \
