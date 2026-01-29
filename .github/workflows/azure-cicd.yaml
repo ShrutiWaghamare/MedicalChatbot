@@ -79,14 +79,11 @@ jobs:
           
           echo "Deploying to Azure Container Apps..."
           
-          # Update container app with new image
+          # Registry is already configured on the app; only update image and env vars
           az containerapp update \
             --name $CONTAINER_APP_NAME \
             --resource-group ${{ env.RESOURCE_GROUP }} \
             --image ${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:latest \
-            --registry-server ${{ env.ACR_LOGIN_SERVER }} \
-            --registry-username ${{ secrets.AZURE_CLIENT_ID }} \
-            --registry-password ${{ secrets.AZURE_CLIENT_SECRET }} \
             --set-env-vars \
               PINECONE_API_KEY="${{ secrets.PINECONE_API_KEY }}" \
               AZURE_OPENAI_API_KEY="${{ secrets.AZURE_OPENAI_API_KEY }}" \
