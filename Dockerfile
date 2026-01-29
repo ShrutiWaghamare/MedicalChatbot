@@ -27,7 +27,9 @@ COPY src ./src
 
 # Install Python dependencies with CPU-only torch
 # Force CPU-only installation to avoid CUDA dependencies
+# Install Flask first so the app always has it (avoids ModuleNotFoundError in container)
 RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu \
+    && pip install --no-cache-dir "flask>=3.0.0" \
     && pip install --no-cache-dir -r requirements.txt \
     && pip cache purge || true \
     && rm -rf /tmp/* \

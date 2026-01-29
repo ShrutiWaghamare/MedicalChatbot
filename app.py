@@ -129,14 +129,20 @@ def history():
 
 
 if __name__ == '__main__':
-    # Initialize chatbot on startup (lazy loading)
+    import threading
+    from src.chatbot import initialize_chatbot
+
+    def init_chatbot_background():
+        """Load model in background so Flask responds quickly (deployed app won't timeout)."""
+        try:
+            logger.info("Starting chatbot initialization in background...")
+            initialize_chatbot()
+            logger.info("✅ Chatbot initialized successfully")
+        except Exception as e:
+            logger.warning(f"⚠️ Chatbot initialization warning: {str(e)}")
+
+    # Start Flask immediately so the app responds in seconds (Azure won't timeout)
     logger.info("Starting Medical Chatbot application...")
-    try:
-        from src.chatbot import initialize_chatbot
-        initialize_chatbot()
-        logger.info("✅ Chatbot initialized successfully")
-    except Exception as e:
-        logger.warning(f"⚠️ Chatbot initialization warning: {str(e)}")
-        logger.info("Chatbot will initialize on first query")
-    
+    t = threading.Thread(target=init_chatbot_background, daemon=True)
+    t.start()
     app.run(debug=True, host='0.0.0.0', port=5000)
