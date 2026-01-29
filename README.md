@@ -4,10 +4,6 @@
 
 A Medical Chatbot built using **LangChain**, **Azure OpenAI (LLM only)**, **Pinecone**, and **Flask**, with **Azure CI/CD deployment** using GitHub Actions.
 
-### 🌐 Live Demo
-
-**[Medical Chatbot – AI Health Assistant](https://medicalchatbot-app.whitehill-a20af7d4.eastus.azurecontainerapps.io/)** — try it in your browser.
-
 ---
 
 ## 🧰 Tech Stack
