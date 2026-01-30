@@ -6,7 +6,7 @@ Chatbot answers user questions via RAG (no file uploads).
 from flask import Flask, render_template, request, jsonify, session
 from src.chatbot import get_response
 from src.memory import conversation_memory
-from src.storage import init_db, fetch_messages
+from src.storage import init_db, fetch_messages, insert_reaction, delete_reaction, fetch_reactions, record_visit, fetch_visits, get_visit_counts
 import logging
 import uuid
 import os
@@ -27,6 +27,17 @@ def index():
     # Initialize session ID if not exists
     if 'session_id' not in session:
         session['session_id'] = str(uuid.uuid4())
+    # Record visitor (page load) for tracking
+    from datetime import datetime
+    try:
+        record_visit(
+            session['session_id'],
+            datetime.utcnow().isoformat(),
+            user_agent=request.headers.get('User-Agent'),
+            referrer=request.referrer,
+        )
+    except Exception as e:
+        logger.warning(f"Could not record visit: {e}")
     return render_template('index.html')
 
 @app.route('/api/chat', methods=['POST'])
@@ -98,6 +109,104 @@ def history():
     except Exception as e:
         logger.error(f"Error fetching history: {str(e)}", exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/reaction', methods=['POST'])
+def reaction():
+    """Save like/dislike feedback for a message."""
+    try:
+        if 'session_id' not in session:
+            session['session_id'] = str(uuid.uuid4())
+        session_id = session['session_id']
+        data = request.get_json() or {}
+        message_id = data.get('message_id')
+        reaction_val = data.get('reaction')
+        if not message_id:
+            return jsonify({'success': False, 'error': 'message_id required'}), 400
+        if reaction_val is None or reaction_val == '':
+            delete_reaction(session_id, message_id)
+            return jsonify({'success': True, 'message': 'Reaction removed'})
+        if reaction_val not in ('like', 'dislike'):
+            return jsonify({'success': False, 'error': 'reaction must be like or dislike'}), 400
+        from datetime import datetime
+        message_content = (data.get('message_content') or '').strip()[:2000]
+        insert_reaction(
+            session_id, message_id, reaction_val, datetime.utcnow().isoformat(),
+            message_content=message_content or None,
+        )
+        logger.info(f"Session {session_id[:8]}... - Reaction: {reaction_val} for message {message_id}")
+        return jsonify({'success': True, 'message': 'Reaction saved'})
+    except Exception as e:
+        logger.error(f"Error saving reaction: {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+def _admin_allowed():
+    """Allow admin if ADMIN_SECRET is unset, or if request has ?key=ADMIN_SECRET."""
+    secret = os.environ.get('ADMIN_SECRET')
+    if not secret:
+        return True
+    return request.args.get('key') == secret
+
+
+@app.route('/api/feedback', methods=['GET'])
+def feedback():
+    """Return recent feedback (reactions) for viewing/export. Optional: limit=200. When ADMIN_SECRET is set, ?key= required."""
+    if not _admin_allowed():
+        return jsonify({'error': 'Unauthorized'}), 403
+    try:
+        limit = request.args.get('limit', 200, type=int)
+        limit = min(max(1, limit), 500)
+        reactions = fetch_reactions(limit=limit)
+        return jsonify({'success': True, 'feedback': reactions})
+    except Exception as e:
+        logger.error(f"Error fetching feedback: {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/visits', methods=['GET'])
+def visits():
+    """Return recent visitor records for admin/analytics. Optional: limit=500. When ADMIN_SECRET is set, ?key= required."""
+    if not _admin_allowed():
+        return jsonify({'error': 'Unauthorized'}), 403
+    try:
+        limit = request.args.get('limit', 500, type=int)
+        limit = min(max(1, limit), 1000)
+        visits_list = fetch_visits(limit=limit)
+        counts = get_visit_counts()
+        return jsonify({'success': True, 'visits': visits_list, 'total_visits': counts['total_visits'], 'unique_visitors': counts['unique_visitors']})
+    except Exception as e:
+        logger.error(f"Error fetching visits: {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/admin')
+def admin():
+    """Admin dashboard: visits and feedback. Optional: set ADMIN_SECRET and use ?key=... to protect."""
+    if not _admin_allowed():
+        return jsonify({'error': 'Unauthorized'}), 403
+    visits_list = []
+    feedback_list = []
+    visit_counts = {"total_visits": 0, "unique_visitors": 0}
+    try:
+        visits_list = fetch_visits(limit=200)
+    except Exception as e:
+        logger.warning(f"Could not load visits for admin: {e}")
+    try:
+        feedback_list = fetch_reactions(limit=200)
+    except Exception as e:
+        logger.warning(f"Could not load feedback for admin: {e}")
+    try:
+        visit_counts = get_visit_counts()
+    except Exception as e:
+        logger.warning(f"Could not load visit counts for admin: {e}")
+    return render_template(
+        'admin.html',
+        visits=visits_list,
+        feedback=feedback_list,
+        visit_counts=visit_counts,
+        api_base=request.script_root.rstrip('/') if request.script_root else '',
+    )
 
 
 if __name__ == '__main__':

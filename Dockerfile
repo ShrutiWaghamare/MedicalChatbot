@@ -51,6 +51,7 @@ COPY static ./static
 RUN mkdir -p /app/data
 
 ENV FLASK_APP=app.py
+ENV FLASK_ENV=production
 EXPOSE 5000
 
 # Pass PINECONE_API_KEY, AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT via env at runtime

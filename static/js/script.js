@@ -741,8 +741,9 @@ function handleReaction(button, reactionType) {
         }, 300);
     }
     
-    // Optional: Send feedback to backend
-    sendReactionToBackend(messageId, isAlreadyActive ? null : reactionType);
+    // Optional: Send feedback to backend (include message text for admin)
+    const messageText = messageDiv.querySelector('.message-text')?.innerText?.trim().slice(0, 500) || '';
+    sendReactionToBackend(messageId, isAlreadyActive ? null : reactionType, messageText);
 }
 
 // Save reaction to localStorage
@@ -768,10 +769,9 @@ function loadReaction(messageId, likeBtn, dislikeBtn) {
     }
 }
 
-// Send reaction to backend (optional - for analytics)
-async function sendReactionToBackend(messageId, reaction) {
+// Send reaction to backend (optional - for analytics; messageContent shown in admin)
+async function sendReactionToBackend(messageId, reaction, messageContent) {
     try {
-        // You can implement this endpoint in your Flask app if needed
         await fetch('/api/reaction', {
             method: 'POST',
             headers: {
@@ -779,7 +779,8 @@ async function sendReactionToBackend(messageId, reaction) {
             },
             body: JSON.stringify({
                 message_id: messageId,
-                reaction: reaction
+                reaction: reaction,
+                message_content: messageContent || ''
             })
         });
     } catch (error) {
