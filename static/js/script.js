@@ -76,6 +76,16 @@ document.addEventListener('DOMContentLoaded', () => {
     
 });
 
+function formatTimestampIST(iso) {
+    if (!iso) return '—';
+    try {
+        const s = String(iso).trim();
+        const d = /Z$|[+-]\d{2}:?\d{2}$/.test(s) ? new Date(s) : new Date(s + (s.includes('.') ? 'Z' : '.000Z'));
+        if (isNaN(d.getTime())) return iso;
+        return d.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'short', timeStyle: 'short', hour12: false });
+    } catch (_) { return iso; }
+}
+
 async function loadHistoryTable() {
     if (!historyTableBody) return;
     historyTableBody.innerHTML = '<tr><td colspan="3">Loading...</td></tr>';
@@ -91,7 +101,7 @@ async function loadHistoryTable() {
                 ? (() => { try { return marked.parse(m.content); } catch (e) { return escapeHtml(m.content); } })()
                 : escapeHtml(m.content);
             return `<tr>
-                <td>${new Date(m.timestamp).toLocaleString()}</td>
+                <td>${formatTimestampIST(m.timestamp)}</td>
                 <td>${m.role}</td>
                 <td class="history-content">${content}</td>
             </tr>`;
@@ -485,7 +495,7 @@ function addMessage(text, sender, isError = false, showRetry = false, originalQu
         messageQuestions.set(messageId, originalQuestion);
     }
     
-    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const time = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false });
     
     // Create avatar
     const avatar = document.createElement('div');
