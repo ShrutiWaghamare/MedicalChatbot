@@ -55,7 +55,7 @@ class ConversationMemory:
         message = {
             'role': role,
             'content': content,
-            'timestamp': datetime.now().isoformat()
+            'timestamp': datetime.utcnow().isoformat() + 'Z'
         }
 
         self.memories[session_id].append(message)

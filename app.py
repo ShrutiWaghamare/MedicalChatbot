@@ -3,13 +3,14 @@ Medical Chatbot - Flask Application
 Main entry point for the web interface.
 Chatbot answers user questions via RAG (no file uploads).
 """
-from flask import Flask, render_template, request, jsonify, session
-from src.chatbot import get_response
+from flask import Flask, render_template, request, jsonify, session, Response, stream_with_context
+from src.chatbot import get_response, stream_response
 from src.memory import conversation_memory
 from src.storage import init_db, fetch_messages, insert_reaction, delete_reaction, fetch_reactions, record_visit, fetch_visits, get_visit_counts
 import logging
 import uuid
 import os
+import threading
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -27,17 +28,20 @@ def index():
     # Initialize session ID if not exists
     if 'session_id' not in session:
         session['session_id'] = str(uuid.uuid4())
-    # Record visitor (page load) for tracking
+    # Record visitor (page load) off critical path so response is not delayed (PERF_PLAN)
     from datetime import datetime
-    try:
-        record_visit(
-            session['session_id'],
-            datetime.utcnow().isoformat(),
-            user_agent=request.headers.get('User-Agent'),
-            referrer=request.referrer,
-        )
-    except Exception as e:
-        logger.warning(f"Could not record visit: {e}")
+    def _record_visit():
+        try:
+            record_visit(
+                session['session_id'],
+                datetime.utcnow().isoformat(),
+                user_agent=request.headers.get('User-Agent'),
+                referrer=request.referrer,
+            )
+        except Exception as e:
+            logger.warning(f"Could not record visit: {e}")
+    t = threading.Thread(target=_record_visit, daemon=True)
+    t.start()
     return render_template('index.html')
 
 @app.route('/api/chat', methods=['POST'])
@@ -76,6 +80,50 @@ def chat():
             'success': False,
             'error': f'An error occurred: {str(e)}'
         }), 500
+
+
+# SSE comment padding to force WSGI/server to flush each event (avoid buffering full response)
+_SSE_FLUSH_PADDING = ": " + (" " * 2048) + "\n"
+
+
+def _stream_events(session_id: str, question: str):
+    """Generate SSE events from stream_response. Sends 'data: <chunk>' per token and final 'data: [DONE]'.
+    Uses padding so each yield is sent immediately (stream-wise) instead of being buffered."""
+    try:
+        for chunk in stream_response(question, session_id=session_id):
+            if chunk:
+                # Send chunk + padding so server flushes immediately (token-wise streaming)
+                yield f"data: {chunk}\n{_SSE_FLUSH_PADDING}\n"
+        yield f"data: [DONE]\n{_SSE_FLUSH_PADDING}\n"
+    except Exception as e:
+        logger.error(f"Stream error: {str(e)}", exc_info=True)
+        yield f"data: [ERROR] {str(e)}\n{_SSE_FLUSH_PADDING}\n"
+
+
+@app.route('/api/chat/stream', methods=['POST'])
+def chat_stream():
+    """Handle chat with Server-Sent Events streaming."""
+    try:
+        if 'session_id' not in session:
+            session['session_id'] = str(uuid.uuid4())
+        session_id = session['session_id']
+        data = request.get_json()
+        question = (data.get('question') or '').strip()
+        if not question:
+            return jsonify({'success': False, 'error': 'Please provide a question.'}), 400
+        logger.info(f"Session {session_id[:8]}... - Stream question: {question}")
+        return Response(
+            stream_with_context(_stream_events(session_id, question)),
+            mimetype='text/event-stream',
+            headers={
+                'Cache-Control': 'no-cache',
+                'X-Accel-Buffering': 'no',
+                'Connection': 'keep-alive',
+            },
+        )
+    except Exception as e:
+        logger.error(f"Error starting stream: {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @app.route('/api/clear', methods=['POST'])

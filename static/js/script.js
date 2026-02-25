@@ -268,6 +268,26 @@ function autoResizeTextarea() {
     userInput.style.height = Math.min(userInput.scrollHeight, 150) + 'px';
 }
 
+// Fix word breaks from streaming (e.g. "Di abetes" -> "Diabetes", "ur ination" -> "urination")
+function fixStreamedWordBreaks(text) {
+    if (!text || typeof text !== 'string') return text;
+    const fixes = [
+        [/Di\s+abetes/gi, 'Diabetes'],
+        [/ur\s+ination/gi, 'urination'],
+        [/Excess\s+ive/gi, 'Excessive'],
+        [/Un\s+expl\s+ained/gi, 'Unexplained'],
+        [/Fat\s+igue/gi, 'Fatigue'],
+        [/Bl\s+urred/gi, 'Blurred'],
+        [/Ting\s+ling/gi, 'Tingling'],
+        [/numb\s+ness/gi, 'numbness'],
+        [/Ins\s+ulin/gi, 'Insulin'],
+        [/Horm\s+onal/gi, 'Hormonal']
+    ];
+    let out = text;
+    fixes.forEach(([pattern, replacement]) => { out = out.replace(pattern, replacement); });
+    return out;
+}
+
 // Handle form submission
 chatForm.addEventListener('submit', handleSubmit);
 
@@ -365,57 +385,137 @@ async function handleSubmit(e) {
     let hasError = false;
     
     try {
-        // Send request to backend with retry logic
-        const response = await fetchWithRetry('/api/chat', {
+        // Prefer streaming (SSE) for lower perceived latency
+        const streamRes = await fetch('/api/chat/stream', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ question: question })
         });
         
-        const data = await response.json();
-        
-        // Hide typing indicator
-        hideTypingIndicator();
-        
-        if (data.success) {
-            // Add bot response
-            botMessageId = addMessage(data.answer, 'bot');
-            updateConnectionStatus(true);
-        } else {
-            // Show error message with retry option
-            hasError = true;
-            const errorMsg = data.error || 'Something went wrong. Please try again.';
-            botMessageId = addMessage(`Error: ${errorMsg}`, 'bot', true, true, question);
-            showToast(errorMsg, 'error');
-            updateConnectionStatus(false);
+        if (!streamRes.ok || !streamRes.body) {
+            throw new Error(streamRes.ok ? 'No stream body' : `HTTP ${streamRes.status}`);
         }
-    } catch (error) {
+        
+        const { messageId: streamMsgId, messageTextEl } = addMessageStreaming();
+        botMessageId = streamMsgId;
+        // Keep typing indicator until first chunk arrives (answer starts within ~3 sec)
+
+        const reader = streamRes.body.getReader();
+        const decoder = new TextDecoder();
+        let fullText = '';
+        let buffer = '';
+        let streamEnded = false;
+        let firstChunkReceived = false;
+
+        while (!streamEnded) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+            for (const line of lines) {
+                if (!line.startsWith('data: ')) continue;
+                const data = line.slice(6).trim();
+                if (data === '[DONE]') {
+                    streamEnded = true;
+                    break;
+                }
+                if (data.startsWith('[ERROR]')) {
+                    const errMsg = data.slice(7).trim() || 'Stream error.';
+                    messageTextEl.textContent = errMsg;
+                    messageTextEl.classList.add('error-message');
+                    messageTextEl.classList.remove('streaming');
+                    hasError = true;
+                    showToast(errMsg, 'error');
+                    updateConnectionStatus(false);
+                    streamEnded = true;
+                    break;
+                }
+                if (!firstChunkReceived) {
+                    firstChunkReceived = true;
+                    hideTypingIndicator();
+                }
+                // Add space between chunks when none so we get "Common symptoms of diabetes" not "Commonsymptomsofdiabetes"
+                if (fullText.length && data.length) {
+                    const lastCh = fullText.slice(-1);
+                    const firstCh = data.slice(0, 1);
+                    if (!/[\s.,;:!?\-)\]"'"]/.test(lastCh) && !/[\s.,;:!?\-(\["'"]/.test(firstCh)) {
+                        fullText += ' ';
+                    }
+                }
+                fullText += data;
+                // Strip ** so user sees plain text, not raw markdown
+                messageTextEl.textContent = fullText.replace(/\*\*/g, '');
+                scrollToBottom();
+                // Yield to browser so user sees stream-wise update (answer building in ~real time)
+                await new Promise(r => requestAnimationFrame(r));
+            }
+        }
+        if (!firstChunkReceived) hideTypingIndicator();
+        if (buffer.trim().startsWith('data: ')) {
+            const data = buffer.trim().slice(6).trim();
+            if (data && data !== '[DONE]' && !data.startsWith('[ERROR]')) {
+                if (fullText.length && data.length && !/[\s.,;:!?\-)\]"'"]/.test(fullText.slice(-1)) && !/[\s.,;:!?\-(\["'"]/.test(data.slice(0, 1))) {
+                    fullText += ' ';
+                }
+                fullText += data;
+                messageTextEl.textContent = fullText.replace(/\*\*/g, '');
+            }
+        }
+
+        if (!hasError && fullText) {
+            messageTextEl.classList.remove('streaming');
+            let cleanText = fixStreamedWordBreaks(fullText.replace(/\*\*/g, ''));
+            // Fix run-on numbered list: "word.2.Item" -> "word.\n2. Item" so each item on its own line
+            cleanText = cleanText.replace(/\.(\d+)\.\s*/g, '.\n$1. ');
+            try {
+                const renderer = new marked.Renderer();
+                renderer.code = function(code, lang, escaped) {
+                    const langClass = lang ? `language-${lang}` : 'language-text';
+                    return `<pre class="${langClass}"><code class="${langClass}">${escaped ? code : escapeHtml(code)}</code></pre>`;
+                };
+                marked.setOptions({ breaks: true, gfm: true, renderer });
+                messageTextEl.innerHTML = marked.parse(cleanText);
+                highlightCodeBlocks(messageTextEl);
+            } catch (_) {
+                messageTextEl.textContent = cleanText;
+            }
+            const streamMsg = document.querySelector(`[data-message-id="${streamMsgId}"]`);
+            if (streamMsg) loadReaction(streamMsgId, streamMsg.querySelector('.reaction-btn[data-reaction="like"]'), streamMsg.querySelector('.reaction-btn[data-reaction="dislike"]'));
+            updateConnectionStatus(true);
+        }
+    } catch (streamError) {
         hideTypingIndicator();
         hasError = true;
-        
-        // Determine error type and message
-        let errorMsg = 'An error occurred. Please try again.';
-        let errorType = 'error';
-        
-        if (error.message.includes('timeout')) {
-            errorMsg = 'Request timed out. The server is taking too long to respond.';
-            errorType = 'timeout';
-        } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-            errorMsg = 'Network error. Please check your internet connection.';
-            errorType = 'network';
-        } else if (error.message.includes('HTTP')) {
-            errorMsg = `Server error: ${error.message}`;
-            errorType = 'server';
+        // Fallback to non-streaming
+        try {
+            const response = await fetchWithRetry('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ question: question })
+            });
+            const data = await response.json();
+            if (data.success) {
+                botMessageId = addMessage(data.answer, 'bot');
+                updateConnectionStatus(true);
+                hasError = false;
+            } else {
+                const errorMsg = data.error || 'Something went wrong. Please try again.';
+                botMessageId = addMessage(`Error: ${errorMsg}`, 'bot', true, true, question);
+                showToast(errorMsg, 'error');
+                updateConnectionStatus(false);
+            }
+        } catch (error) {
+            let errorMsg = 'An error occurred. Please try again.';
+            if (error.message.includes('timeout')) errorMsg = 'Request timed out. The server is taking too long to respond.';
+            else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) errorMsg = 'Network error. Please check your internet connection.';
+            else if (error.message.includes('HTTP')) errorMsg = `Server error: ${error.message}`;
+            botMessageId = addMessage(errorMsg, 'bot', true, true, question);
+            showToast(errorMsg, 'error');
+            updateConnectionStatus(false);
+            console.error('Error:', error);
         }
-        
-        botMessageId = addMessage(errorMsg, 'bot', true, true, question);
-        showToast(errorMsg, 'error');
-        updateConnectionStatus(false);
-        console.error('Error:', error);
     } finally {
-        // Re-enable input
         userInput.disabled = false;
         sendButton.disabled = false;
         userInput.focus();
@@ -481,10 +581,65 @@ setInterval(checkConnectionStatus, 30000);
 // Store original questions for retry
 const messageQuestions = new Map();
 
-// Add message to chat
+// Create an empty bot message for streaming; returns { messageId, messageTextEl } so caller can append chunks.
+function addMessageStreaming() {
+    const messageDiv = document.createElement('div');
+    const messageId = `msg-${Date.now()}-${(++messageIdCounter).toString(36)}`;
+    messageDiv.className = 'message bot-message';
+    messageDiv.setAttribute('data-message-id', messageId);
+
+    const time = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false });
+    const avatar = document.createElement('div');
+    avatar.className = 'message-avatar';
+    avatar.innerHTML = '<i class="fas fa-robot"></i>';
+    const content = document.createElement('div');
+    content.className = 'message-content';
+    const messageText = document.createElement('div');
+    messageText.className = 'message-text streaming';
+    messageText.appendChild(document.createTextNode(''));
+
+    const messageTime = document.createElement('div');
+    messageTime.className = 'message-time';
+    messageTime.textContent = time;
+    content.appendChild(messageText);
+
+    const messageActions = document.createElement('div');
+    messageActions.className = 'message-actions';
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'action-btn';
+    copyBtn.setAttribute('onclick', `copyMessage(this)`);
+    copyBtn.setAttribute('title', 'Copy message');
+    copyBtn.innerHTML = '<i class="fas fa-copy"></i>';
+    messageActions.appendChild(copyBtn);
+    const likeBtn = document.createElement('button');
+    likeBtn.className = 'action-btn reaction-btn';
+    likeBtn.setAttribute('onclick', `handleReaction(this, 'like')`);
+    likeBtn.setAttribute('title', 'Helpful');
+    likeBtn.setAttribute('data-reaction', 'like');
+    likeBtn.setAttribute('data-message-id', messageId);
+    likeBtn.innerHTML = '<i class="fas fa-thumbs-up"></i>';
+    messageActions.appendChild(likeBtn);
+    const dislikeBtn = document.createElement('button');
+    dislikeBtn.className = 'action-btn reaction-btn';
+    dislikeBtn.setAttribute('onclick', `handleReaction(this, 'dislike')`);
+    dislikeBtn.setAttribute('title', 'Not helpful');
+    dislikeBtn.setAttribute('data-reaction', 'dislike');
+    dislikeBtn.setAttribute('data-message-id', messageId);
+    dislikeBtn.innerHTML = '<i class="fas fa-thumbs-down"></i>';
+    messageActions.appendChild(dislikeBtn);
+    content.appendChild(messageActions);
+    content.appendChild(messageTime);
+    messageDiv.appendChild(avatar);
+    messageDiv.appendChild(content);
+    chatMessages.appendChild(messageDiv);
+    scrollToBottom();
+    return { messageId, messageTextEl: messageText };
+}
+
+// Add message to chat (use unique id so saved reactions from a previous session are not applied to new messages)
 function addMessage(text, sender, isError = false, showRetry = false, originalQuestion = null) {
     const messageDiv = document.createElement('div');
-    const messageId = `msg-${++messageIdCounter}`;
+    const messageId = `msg-${Date.now()}-${(++messageIdCounter).toString(36)}`;
     messageDiv.className = `message ${sender}-message`;
     messageDiv.setAttribute('data-message-id', messageId);
     
@@ -767,11 +922,11 @@ function saveReaction(messageId, reaction) {
     localStorage.setItem('messageReactions', JSON.stringify(reactions));
 }
 
-// Load saved reaction
+// Load saved reaction (only apply if we have a valid stored reaction for this exact message)
 function loadReaction(messageId, likeBtn, dislikeBtn) {
+    if (!messageId || !likeBtn || !dislikeBtn) return;
     const reactions = JSON.parse(localStorage.getItem('messageReactions') || '{}');
     const reaction = reactions[messageId];
-    
     if (reaction === 'like') {
         likeBtn.classList.add('liked');
     } else if (reaction === 'dislike') {

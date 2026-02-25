@@ -1022,6 +1022,21 @@ h1, h2, h3, h4, h5, h6 {
     border-color: var(--border-light);
 }
 
+.message-text.streaming::after {
+    content: '';
+    display: inline-block;
+    width: 2px;
+    height: 1em;
+    background: var(--primary);
+    margin-left: 2px;
+    vertical-align: text-bottom;
+    animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+    50% { opacity: 0; }
+}
+
 .message-text p {
     margin-bottom: 10px;
     color: var(--text-primary);
@@ -1055,6 +1070,16 @@ h1, h2, h3, h4, h5, h6 {
 .message-text li {
     margin: 6px 0;
     color: var(--text-secondary);
+}
+
+/* Highlight important terms (bold) in bot replies */
+.message-text strong {
+    font-weight: 600;
+    color: var(--primary-light);
+}
+
+[data-theme="light"] .message-text strong {
+    color: var(--primary-dark);
 }
 
 .message-text code {
@@ -1244,9 +1269,10 @@ h1, h2, h3, h4, h5, h6 {
     transform: scale(0.95);
 }
 
-/* Reaction Buttons */
+/* Reaction Buttons - default neutral (grey); green/red only when .liked / .disliked */
 .reaction-btn {
     position: relative;
+    color: var(--text-secondary);
 }
 
 .reaction-btn.liked {
